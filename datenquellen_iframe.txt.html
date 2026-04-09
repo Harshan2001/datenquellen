@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Datenquellen – Interaktives Schaubild</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  background: #f4f6f8;
+  padding: 16px;
+}
+
+.widget {
+  max-width: 860px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #dde2ea;
+}
+
+.widget-header {
+  background: #1c3d5e;
+  color: #fff;
+  padding: 14px 20px;
+}
+.widget-header h2 { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+.widget-header p  { font-size: 11.5px; opacity: 0.72; line-height: 1.4; }
+
+.widget-body { display: flex; }
+
+/* diagram */
+.diagram-wrap {
+  flex: 1;
+  position: relative;
+  background: #f7f9fb;
+  border-right: 1px solid #e4e8ee;
+}
+.diagram-wrap svg { display: block; width: 100%; }
+
+/* tooltip */
+.tip {
+  position: absolute;
+  background: rgba(18,28,48,0.93);
+  color: #fff;
+  font-size: 11.5px;
+  line-height: 1.5;
+  padding: 7px 12px;
+  border-radius: 7px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  max-width: 210px;
+  z-index: 20;
+}
+
+/* controls */
+.controls {
+  width: 176px;
+  flex-shrink: 0;
+  padding: 16px 13px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #fff;
+}
+
+.ctrl-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9aa;
+  margin-bottom: 1px;
+}
+
+.ctrl-group { display: flex; flex-direction: column; gap: 7px; }
+
+.flt-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #556;
+  background: #f5f7fa;
+  border: 1.5px solid #dde2ea;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  line-height: 1.25;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.flt-btn:hover { background: #edf0f5; border-color: #b0bac8; }
+.flt-btn.on-extern    { background: #ddeaf7; border-color: #2d6ca8; color: #0e3060; }
+.flt-btn.on-intern    { background: #daf0e5; border-color: #287a50; color: #0d4028; }
+.flt-btn.on-formell   { background: #fdecd8; border-color: #c06810; color: #703800; }
+.flt-btn.on-informell { background: #f0e5fa; border-color: #8040a8; color: #420878; }
+
+.flt-btn .check {
+  margin-left: auto;
+  width: 15px; height: 15px;
+  border-radius: 4px;
+  border: 1.5px solid #ccc;
+  background: #fff;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  transition: all 0.15s;
+}
+.flt-btn.on-extern    .check { border-color: #2d6ca8; background: #2d6ca8; color: #fff; }
+.flt-btn.on-intern    .check { border-color: #287a50; background: #287a50; color: #fff; }
+.flt-btn.on-formell   .check { border-color: #c06810; background: #c06810; color: #fff; }
+.flt-btn.on-informell .check { border-color: #8040a8; background: #8040a8; color: #fff; }
+
+.dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.d-extern    { background: #2d6ca8; }
+.d-intern    { background: #287a50; }
+.d-formell   { background: #c06810; }
+.d-informell { background: #8040a8; }
+
+.divider { height: 1px; background: #eee; }
+
+.reset-btn {
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid #dde2ea;
+  border-radius: 8px;
+  background: #fff;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-top: auto;
+}
+.reset-btn:hover { background: #f5f5f5; color: #444; }
+
+.legend { display: flex; flex-direction: column; gap: 5px; }
+.leg-title {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  color: #9aa; margin-bottom: 2px;
+}
+.leg-row { display: flex; align-items: center; gap: 7px; font-size: 11px; color: #556; }
+.leg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.leg-split {
+  width: 20px; height: 10px; border-radius: 10px; flex-shrink: 0;
+  background: linear-gradient(to right, #2d6ca8 50%, #c06810 50%);
+}
+
+.info-bar {
+  border-top: 1px solid #e4e8ee;
+  background: #f0f4f8;
+  padding: 9px 16px;
+  font-size: 11.5px;
+  color: #445;
+  min-height: 38px;
+  line-height: 1.55;
+}
+.info-bar strong { color: #1c3d5e; }
+
+.nc { transition: fill 0.28s ease, stroke 0.28s ease, opacity 0.28s ease; }
+</style>
+</head>
+<body>
+
+<div class="widget">
+  <div class="widget-header">
+    <h2>Daten- und Informationsquellen im Schulbereich</h2>
+    <p>Wählen Sie eine oder mehrere Kategorien — passende Knoten leuchten in der jeweiligen Farbe auf.</p>
+  </div>
+
+  <div class="widget-body">
+    <div class="diagram-wrap" id="dWrap">
+      <svg id="svg" viewBox="0 0 620 400" xmlns="http://www.w3.org/2000/svg">
+        <defs id="defs"></defs>
+
+        <!-- axis lines -->
+        <line x1="30"  y1="200" x2="590" y2="200" stroke="#dde2ea" stroke-width="1"/>
+        <line x1="310" y1="18"  x2="310" y2="382" stroke="#dde2ea" stroke-width="1"/>
+
+        <!-- arrowheads -->
+        <polygon points="590,197 598,200 590,203" fill="#ccc"/>
+        <polygon points="30,203 22,200 30,197"    fill="#ccc"/>
+        <polygon points="307,18 310,10 313,18"    fill="#ccc"/>
+        <polygon points="313,382 310,390 307,382" fill="#ccc"/>
+
+        <!-- axis labels -->
+        <text x="310" y="10"  text-anchor="middle" font-size="10" font-weight="700" fill="#aab" letter-spacing="2" font-family="Arial,sans-serif">FORMELL</text>
+        <text x="310" y="398" text-anchor="middle" font-size="10" font-weight="700" fill="#aab" letter-spacing="2" font-family="Arial,sans-serif">INFORMELL</text>
+        <text x="16"  y="200" text-anchor="middle" font-size="10" font-weight="700" fill="#aab" letter-spacing="2" font-family="Arial,sans-serif" transform="rotate(-90,16,200)">EXTERN</text>
+        <text x="607" y="200" text-anchor="middle" font-size="10" font-weight="700" fill="#aab" letter-spacing="2" font-family="Arial,sans-serif" transform="rotate(90,607,200)">INTERN</text>
+
+        <!-- quadrant hints -->
+        <text x="50"  y="36"  font-size="9" fill="#ccd" font-style="italic" font-family="Arial,sans-serif">extern · formell</text>
+        <text x="400" y="36"  font-size="9" fill="#ccd" font-style="italic" font-family="Arial,sans-serif">intern · formell</text>
+        <text x="50"  y="390" font-size="9" fill="#ccd" font-style="italic" font-family="Arial,sans-serif">extern · informell</text>
+        <text x="390" y="390" font-size="9" fill="#ccd" font-style="italic" font-family="Arial,sans-serif">intern · informell</text>
+
+        <g id="nodesG"></g>
+      </svg>
+      <div class="tip" id="tip"></div>
+    </div>
+
+    <div class="controls">
+      <div class="ctrl-group">
+        <div class="ctrl-label">Herkunft</div>
+        <button class="flt-btn" id="btn-extern" onclick="toggle('extern')">
+          <span class="dot d-extern"></span>Externe Daten
+          <span class="check" id="chk-extern"></span>
+        </button>
+        <button class="flt-btn" id="btn-intern" onclick="toggle('intern')">
+          <span class="dot d-intern"></span>Interne Daten
+          <span class="check" id="chk-intern"></span>
+        </button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="ctrl-group">
+        <div class="ctrl-label">Format</div>
+        <button class="flt-btn" id="btn-formell" onclick="toggle('formell')">
+          <span class="dot d-formell"></span>Formelle Daten
+          <span class="check" id="chk-formell"></span>
+        </button>
+        <button class="flt-btn" id="btn-informell" onclick="toggle('informell')">
+          <span class="dot d-informell"></span>Informelle Daten
+          <span class="check" id="chk-informell"></span>
+        </button>
+      </div>
+
+      <div class="legend">
+        <div class="leg-title">Farben</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#2d6ca8"></div>Extern</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#287a50"></div>Intern</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#c06810"></div>Formell</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#8040a8"></div>Informell</div>
+        <div class="leg-row"><div class="leg-split"></div>Mehrere aktiv</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#c8d0da;opacity:.5"></div>Nicht gewählt</div>
+      </div>
+
+      <button class="reset-btn" onclick="resetAll()">↺ Alle anzeigen</button>
+    </div>
+  </div>
+
+  <div class="info-bar" id="infoBar">
+    Klicken Sie auf eine oder mehrere Kategorien — oder direkt auf einen Knoten für Details.
+  </div>
+</div>
+
+<script>
+const NODES = [
+  {
+    id: 'lernstandserhebungen',
+    label: ['Formen landes-', 'weiter Lernstands-', 'erhebungen'],
+    herkunft: 'extern',
+    format: 'formell',
+    cx: 140, cy: 100, r: 62,
+    desc: 'Standardisierte landesweite Tests zur Erfassung von Schülerkompetenzen, z. B. VERA.'
+  },
+  {
+    id: 'unterrichtsausfall',
+    label: ['Unterrichts-', 'ausfall'],
+    herkunft: 'intern',
+    format: 'formell',
+    cx: 430, cy: 80, r: 52,
+    desc: 'Systematisch erfasste Daten zu Unterrichtsausfällen und Vertretungen innerhalb der Schule.'
+  },
+  {
+    id: 'hospitation',
+    label: ['Feedback aus', 'kollegialer', 'Hospitation'],
+    herkunft: 'intern',
+    format: 'formell',
+    cx: 390, cy: 168, r: 55,
+    desc: 'Strukturiertes Feedback durch gegenseitige Unterrichtsbesuche im Kollegium.'
+  },
+  {
+    id: 'schulnoten',
+    label: ['Schul-', 'noten'],
+    herkunft: 'intern',
+    format: 'formell',
+    cx: 540, cy: 130, r: 44,
+    desc: 'Intern erhobene Leistungsbeurteilungen durch Lehrkräfte der Schule.'
+  },
+  {
+    id: 'elterngespraech',
+    label: ['Eltern-', 'gespräch'],
+    herkunft: 'extern',
+    format: 'informell',
+    cx: 118, cy: 300, r: 50,
+    desc: 'Informelle Gespräche mit Eltern als wichtige externe Informationsquelle.'
+  },
+  {
+    id: 'externeEvaluation',
+    label: ['Externe', 'Evaluation'],
+    herkunft: 'extern',
+    format: 'informell',
+    cx: 228, cy: 348, r: 46,
+    desc: 'Rückmeldungen und Beratung durch externe Akteure ohne festes standardisiertes Verfahren.'
+  },
+  {
+    id: 'unterrichtsbeobachtung',
+    label: ['Unterrichts-', 'beobachtung'],
+    herkunft: 'intern',
+    format: 'informell',
+    cx: 420, cy: 308, r: 54,
+    desc: 'Informelle Beobachtungen im Unterrichtsalltag durch Lehrkräfte oder Schulleitung.'
+  },
+  {
+    id: 'lernverlauf',
+    label: ['Lernverlaufs-', 'diagnostik'],
+    herkunft: 'intern',
+    format: 'informell',
+    cx: 549, cy: 340, r: 50,
+    desc: 'Formative und informelle Erfassung von Lernfortschritten im täglichen Unterricht.'
+  }
+];
+
+const COLOR = {
+  extern:    { fill: '#2d6ca8', stroke: '#1a4880' },
+  intern:    { fill: '#287a50', stroke: '#155030' },
+  formell:   { fill: '#c06810', stroke: '#8a4500' },
+  informell: { fill: '#8040a8', stroke: '#5a1880' },
+  default:   { fill: '#5b8db8', stroke: '#3a6a95' },
+  dim:       { fill: '#c8d0da', stroke: '#a8b0ba' }
+};
+
+const INFO = {
+  extern:    '<strong>Externe Daten</strong> — stammen von außerhalb der Schule, z. B. durch staatliche Behörden oder externe Evaluationsinstitute.',
+  intern:    '<strong>Interne Daten</strong> — werden innerhalb der Schule erhoben, von Lehrkräften, Teams oder der Schulleitung.',
+  formell:   '<strong>Formelle Daten</strong> — werden systematisch und standardisiert nach festgelegten Verfahren und Kriterien erfasst.',
+  informell: '<strong>Informelle Daten</strong> — entstehen im Schulalltag ohne festes Verfahren, durch Gespräche, Beobachtungen und spontanes Feedback.'
+};
+
+const active = { extern: false, intern: false, formell: false, informell: false };
+
+const nodesG = document.getElementById('nodesG');
+const defs   = document.getElementById('defs');
+const tip    = document.getElementById('tip');
+const infoBar= document.getElementById('infoBar');
+const dWrap  = document.getElementById('dWrap');
+
+NODES.forEach(n => {
+  // clip paths for split coloring
+  ['left','right'].forEach(side => {
+    const cp = document.createElementNS('http://www.w3.org/2000/svg','clipPath');
+    cp.setAttribute('id', `cp-${side}-${n.id}`);
+    const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    rect.setAttribute('x',      side === 'left'  ? n.cx - n.r - 2 : n.cx);
+    rect.setAttribute('y',      n.cy - n.r - 2);
+    rect.setAttribute('width',  n.r + 2);
+    rect.setAttribute('height', n.r * 2 + 4);
+    cp.appendChild(rect);
+    defs.appendChild(cp);
+  });
+
+  const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+  g.setAttribute('id','ng-'+n.id);
+  g.style.cursor = 'pointer';
+
+  // base circle
+  const base = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  base.setAttribute('cx', n.cx); base.setAttribute('cy', n.cy); base.setAttribute('r', n.r);
+  base.setAttribute('fill', COLOR.default.fill);
+  base.setAttribute('stroke', COLOR.default.stroke);
+  base.setAttribute('stroke-width', '2');
+  base.setAttribute('class','nc');
+  base.setAttribute('id','nc-base-'+n.id);
+  g.appendChild(base);
+
+  // left half (herkunft color when split)
+  const left = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  left.setAttribute('cx', n.cx); left.setAttribute('cy', n.cy); left.setAttribute('r', n.r);
+  left.setAttribute('fill','transparent'); left.setAttribute('stroke','none');
+  left.setAttribute('class','nc');
+  left.setAttribute('clip-path',`url(#cp-left-${n.id})`);
+  left.setAttribute('id','nc-left-'+n.id);
+  g.appendChild(left);
+
+  // right half (format color when split)
+  const right = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  right.setAttribute('cx', n.cx); right.setAttribute('cy', n.cy); right.setAttribute('r', n.r);
+  right.setAttribute('fill','transparent'); right.setAttribute('stroke','none');
+  right.setAttribute('class','nc');
+  right.setAttribute('clip-path',`url(#cp-right-${n.id})`);
+  right.setAttribute('id','nc-right-'+n.id);
+  g.appendChild(right);
+
+  // ring on top
+  const ring = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  ring.setAttribute('cx', n.cx); ring.setAttribute('cy', n.cy); ring.setAttribute('r', n.r);
+  ring.setAttribute('fill','none');
+  ring.setAttribute('stroke', COLOR.default.stroke);
+  ring.setAttribute('stroke-width','2');
+  ring.setAttribute('class','nc');
+  ring.setAttribute('id','nc-ring-'+n.id);
+  g.appendChild(ring);
+
+  // split divider line
+  const divLine = document.createElementNS('http://www.w3.org/2000/svg','line');
+  divLine.setAttribute('x1', n.cx); divLine.setAttribute('y1', n.cy - n.r + 2);
+  divLine.setAttribute('x2', n.cx); divLine.setAttribute('y2', n.cy + n.r - 2);
+  divLine.setAttribute('stroke','rgba(255,255,255,0.7)');
+  divLine.setAttribute('stroke-width','2');
+  divLine.setAttribute('id','nc-div-'+n.id);
+  divLine.setAttribute('opacity','0');
+  g.appendChild(divLine);
+
+  // TEXT LABELS — rendered as foreignObject for proper wrapping & sizing
+  // Use SVG text with tspan for each line
+  const fontSize = Math.max(10, Math.min(13, Math.floor(n.r / 3.8)));
+  const lineHeight = fontSize + 3;
+  const totalTextH = n.label.length * lineHeight;
+  const textStartY = n.cy - totalTextH / 2 + lineHeight / 2;
+
+  n.label.forEach((line, i) => {
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', n.cx);
+    t.setAttribute('y', textStartY + i * lineHeight);
+    t.setAttribute('text-anchor','middle');
+    t.setAttribute('dominant-baseline','central');
+    t.setAttribute('font-size', String(fontSize));
+    t.setAttribute('font-weight','700');
+    t.setAttribute('fill','#ffffff');
+    t.setAttribute('id',`nt-${n.id}-${i}`);
+    t.style.pointerEvents = 'none';
+    // drop shadow via filter for readability
+    t.setAttribute('filter','url(#textShadow)');
+    t.textContent = line;
+    g.appendChild(t);
+  });
+
+  // events
+  g.addEventListener('mouseenter', e => {
+    tip.innerHTML = '<strong>'+n.label.join(' ')+'</strong><br>'+n.desc;
+    tip.style.opacity = '1';
+    moveTip(e);
+  });
+  g.addEventListener('mousemove', moveTip);
+  g.addEventListener('mouseleave', () => { tip.style.opacity = '0'; });
+  g.addEventListener('click', () => {
+    infoBar.innerHTML = '<strong>'+n.label.join(' ')+'</strong> — '+n.desc;
+  });
+
+  nodesG.appendChild(g);
+});
+
+// text shadow filter for readability on any background
+const filter = document.createElementNS('http://www.w3.org/2000/svg','filter');
+filter.setAttribute('id','textShadow');
+filter.setAttribute('x','-20%'); filter.setAttribute('y','-20%');
+filter.setAttribute('width','140%'); filter.setAttribute('height','140%');
+const fe = document.createElementNS('http://www.w3.org/2000/svg','feDropShadow');
+fe.setAttribute('dx','0'); fe.setAttribute('dy','0.5');
+fe.setAttribute('stdDeviation','1');
+fe.setAttribute('flood-color','rgba(0,0,0,0.45)');
+filter.appendChild(fe);
+defs.appendChild(filter);
+
+function moveTip(e) {
+  const r = dWrap.getBoundingClientRect();
+  let x = e.clientX - r.left + 14;
+  let y = e.clientY - r.top  + 14;
+  if (x + 215 > r.width) x = e.clientX - r.left - 220;
+  tip.style.left = x + 'px';
+  tip.style.top  = y + 'px';
+}
+
+function toggle(f) {
+  active[f] = !active[f];
+  const btn = document.getElementById('btn-'+f);
+  const chk = document.getElementById('chk-'+f);
+  if (active[f]) { btn.classList.add('on-'+f); chk.textContent = '✓'; }
+  else           { btn.classList.remove('on-'+f); chk.textContent = ''; }
+  applyColors();
+  const activeKeys = Object.keys(active).filter(k => active[k]);
+  if (active[f]) {
+    infoBar.innerHTML = INFO[f];
+  } else if (activeKeys.length > 0) {
+    infoBar.innerHTML = activeKeys.map(k => INFO[k]).join(' &nbsp;|&nbsp; ');
+  } else {
+    infoBar.innerHTML = 'Klicken Sie auf eine oder mehrere Kategorien — oder direkt auf einen Knoten für Details.';
+  }
+}
+
+function applyColors() {
+  const activeKeys = Object.keys(active).filter(k => active[k]);
+  const noneActive = activeKeys.length === 0;
+
+  NODES.forEach(n => {
+    const base    = document.getElementById('nc-base-'+n.id);
+    const left    = document.getElementById('nc-left-'+n.id);
+    const right   = document.getElementById('nc-right-'+n.id);
+    const ring    = document.getElementById('nc-ring-'+n.id);
+    const divEl   = document.getElementById('nc-div-'+n.id);
+    const labels  = [...document.querySelectorAll(`[id^="nt-${n.id}-"]`)];
+
+    const herkunftMatch = active[n.herkunft];
+    const formatMatch   = active[n.format];
+    const isMatch = herkunftMatch || formatMatch;
+
+    if (noneActive) {
+      base.setAttribute('fill',   COLOR.default.fill);
+      base.setAttribute('stroke', COLOR.default.stroke);
+      base.setAttribute('opacity','1');
+      left.setAttribute('fill','transparent');
+      right.setAttribute('fill','transparent');
+      ring.setAttribute('stroke', COLOR.default.stroke);
+      ring.setAttribute('stroke-width','2');
+      ring.setAttribute('opacity','1');
+      divEl.setAttribute('opacity','0');
+      labels.forEach(l => { l.setAttribute('opacity','1'); l.setAttribute('fill','#ffffff'); });
+
+    } else if (!isMatch) {
+      base.setAttribute('fill',   COLOR.dim.fill);
+      base.setAttribute('stroke', COLOR.dim.stroke);
+      base.setAttribute('opacity','0.38');
+      left.setAttribute('fill','transparent');
+      right.setAttribute('fill','transparent');
+      ring.setAttribute('stroke', COLOR.dim.stroke);
+      ring.setAttribute('opacity','0.38');
+      divEl.setAttribute('opacity','0');
+      labels.forEach(l => { l.setAttribute('opacity','0.4'); l.setAttribute('fill','#ffffff'); });
+
+    } else if (herkunftMatch && formatMatch) {
+      // SPLIT: left = herkunft color, right = format color
+      base.setAttribute('fill',   COLOR[n.herkunft].fill);
+      base.setAttribute('stroke', 'none');
+      base.setAttribute('opacity','1');
+      left.setAttribute('fill',  COLOR[n.herkunft].fill);
+      right.setAttribute('fill', COLOR[n.format].fill);
+      ring.setAttribute('stroke','rgba(255,255,255,0.5)');
+      ring.setAttribute('stroke-width','2');
+      ring.setAttribute('opacity','1');
+      divEl.setAttribute('opacity','1');
+      labels.forEach(l => { l.setAttribute('opacity','1'); l.setAttribute('fill','#ffffff'); });
+
+    } else if (herkunftMatch) {
+      base.setAttribute('fill',   COLOR[n.herkunft].fill);
+      base.setAttribute('stroke', COLOR[n.herkunft].stroke);
+      base.setAttribute('opacity','1');
+      left.setAttribute('fill','transparent');
+      right.setAttribute('fill','transparent');
+      ring.setAttribute('stroke', COLOR[n.herkunft].stroke);
+      ring.setAttribute('stroke-width','2');
+      ring.setAttribute('opacity','1');
+      divEl.setAttribute('opacity','0');
+      labels.forEach(l => { l.setAttribute('opacity','1'); l.setAttribute('fill','#ffffff'); });
+
+    } else {
+      // format match only
+      base.setAttribute('fill',   COLOR[n.format].fill);
+      base.setAttribute('stroke', COLOR[n.format].stroke);
+      base.setAttribute('opacity','1');
+      left.setAttribute('fill','transparent');
+      right.setAttribute('fill','transparent');
+      ring.setAttribute('stroke', COLOR[n.format].stroke);
+      ring.setAttribute('stroke-width','2');
+      ring.setAttribute('opacity','1');
+      divEl.setAttribute('opacity','0');
+      labels.forEach(l => { l.setAttribute('opacity','1'); l.setAttribute('fill','#ffffff'); });
+    }
+  });
+}
+
+function resetAll() {
+  Object.keys(active).forEach(k => {
+    active[k] = false;
+    document.getElementById('btn-'+k).className = 'flt-btn';
+    document.getElementById('chk-'+k).textContent = '';
+  });
+  applyColors();
+  infoBar.innerHTML = 'Klicken Sie auf eine oder mehrere Kategorien — oder direkt auf einen Knoten für Details.';
+}
+</script>
+</body>
+</html>
